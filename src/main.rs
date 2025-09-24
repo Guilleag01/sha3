@@ -1,0 +1,26 @@
+use sha3::sha3::Sha3_256;
+
+fn main() {
+    let mut sha = Sha3_256::default();
+
+    // println!("{:?}", (0x01 as u64).to_ne_bytes());
+
+    let text = "hola";
+
+    sha.absorb(text.as_bytes());
+    let res = sha.squeeze();
+
+    let expected_res: [u8; 32] = [
+        0x8a, 0xf1, 0x3d, 0x92, 0x44, 0x61, 0x8e, 0xee, 0x87, 0x6d, 0x04, 0x31, 0xf3, 0x44, 0x9a,
+        0xa4, 0xff, 0x95, 0x27, 0x4c, 0xa3, 0xe7, 0xe5, 0xc6, 0x54, 0x19, 0x79, 0x49, 0x9f, 0x5b,
+        0x85, 0xde,
+    ];
+
+    for i in 0..32 {
+        print!("{:#001x} ", res[i]);
+    }
+    println!();
+
+    assert!(res == expected_res);
+    println!("FUNCIONAAAAA");
+}
