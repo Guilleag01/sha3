@@ -80,51 +80,55 @@ impl Sha3_256 {
 }
 
 fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
-    let (lanes, _) = input.as_chunks_mut::<8>();
+    // let (lanes, _) = input.as_chunks_mut::<8>();
+    let (pre, lanes, post) = unsafe { input.align_to_mut::<u64>() };
+    assert!(pre.len() == 0);
+    assert!(post.len() == 0);
+    assert!(lanes.len() == 25);
     let mut lfsr_state = 0x01_u8;
     for _ in 0..ROUNDS {
         // θ step
         let c: [u64; 5] = array::from_fn(|x| {
-            get_lane(lanes, x, 0)
-                ^ get_lane(lanes, x, 1)
-                ^ get_lane(lanes, x, 2)
-                ^ get_lane(lanes, x, 3)
-                ^ get_lane(lanes, x, 4)
+            get_lane2(lanes, x, 0)
+                ^ get_lane2(lanes, x, 1)
+                ^ get_lane2(lanes, x, 2)
+                ^ get_lane2(lanes, x, 3)
+                ^ get_lane2(lanes, x, 4)
         });
 
         let mut d: u64;
 
         for x in 0..5 {
             d = c[(x + 4) % 5] ^ rol64(c[(x + 1) % 5], 1);
-            let mut out = [0_u64; 8];
-            unsafe {
-                let a: __m512i =
-                    _mm512_set_epi64(d as i64, d as i64, d as i64, d as i64, d as i64, 0, 0, 0);
+            // let mut out = [0_u64; 8];
+            // unsafe {
+            //     let a: __m512i =
+            //         _mm512_set_epi64(d as i64, d as i64, d as i64, d as i64, d as i64, 0, 0, 0);
 
-                let b: __m512i = _mm512_set_epi64(
-                    get_lane(lanes, x, 0) as i64,
-                    get_lane(lanes, x, 1) as i64,
-                    get_lane(lanes, x, 2) as i64,
-                    get_lane(lanes, x, 3) as i64,
-                    get_lane(lanes, x, 4) as i64,
-                    0,
-                    0,
-                    0,
-                );
-                let res = _mm512_xor_epi64(a, b);
-                _mm512_storeu_epi64(out.as_mut_ptr() as *mut i64, res);
-            }
-            for i in 0..5 {
-                set_lane(out[i], x, i, lanes);
-            }
-            // for y in 0..5 {
-            //     xor_lane(d, lanes, x, y);
+            //     let b: __m512i = _mm512_set_epi64(
+            //         get_lane2(lanes, x, 0) as i64,
+            //         get_lane2(lanes, x, 1) as i64,
+            //         get_lane2(lanes, x, 2) as i64,
+            //         get_lane2(lanes, x, 3) as i64,
+            //         get_lane2(lanes, x, 4) as i64,
+            //         0,
+            //         0,
+            //         0,
+            //     );
+            //     let res = _mm512_xor_epi64(a, b);
+            //     _mm512_storeu_epi64(out.as_mut_ptr() as *mut i64, res);
             // }
+            // for i in 0..5 {
+            //     set_lane2(out[i], x, i, lanes);
+            // }
+            for y in 0..5 {
+                xor_lane2(d, lanes, x, y);
+            }
         }
 
         // ρ and π steps
         let (mut x, mut y) = (1, 0);
-        let mut current = get_lane(lanes, x, y);
+        let mut current = get_lane2(lanes, x, y);
         let mut temp: u64;
 
         for t in 0..24 {
@@ -133,8 +137,8 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
             x = y;
             y = y2;
 
-            temp = get_lane(lanes, x, y);
-            set_lane(rol64(current, r), x, y, lanes);
+            temp = get_lane2(lanes, x, y);
+            set_lane2(rol64(current, r), x, y, lanes);
             current = temp;
         }
 
@@ -144,9 +148,9 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
             // for x in 0..5 {
             //     temp2[x] = get_lane(lanes, x, y);
             // }
-            let temp2: [u64; 5] = array::from_fn(|x| get_lane(lanes, x, y));
+            let temp2: [u64; 5] = array::from_fn(|x| get_lane2(lanes, x, y));
             for x in 0..5 {
-                set_lane(
+                set_lane2(
                     temp2[x] ^ ((!temp2[(x + 1) % 5]) & temp2[(x + 2) % 5]),
                     x,
                     y,
@@ -166,7 +170,7 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
             // }
 
             if lfsr_out {
-                xor_lane((1 as u64) << bit_pos, lanes, 0, 0);
+                xor_lane2((1 as u64) << bit_pos, lanes, 0, 0);
             }
         }
     }
@@ -183,6 +187,16 @@ fn set_lane(lane: u64, x: usize, y: usize, lanes: &mut [[u8; 8]]) {
 }
 
 #[inline]
+fn get_lane2(lanes: &[u64], x: usize, y: usize) -> u64 {
+    lanes[x + 5 * y]
+}
+
+#[inline]
+fn set_lane2(lane: u64, x: usize, y: usize, lanes: &mut [u64]) {
+    lanes[x + 5 * y] = lane;
+}
+
+#[inline]
 fn rol64(v: u64, off: usize) -> u64 {
     ((v) << off) ^ ((v) >> (64 - off))
 }
@@ -190,6 +204,11 @@ fn rol64(v: u64, off: usize) -> u64 {
 #[inline]
 fn xor_lane(lane: u64, lanes: &mut [[u8; 8]], x: usize, y: usize) {
     set_lane(get_lane(lanes, x, y) ^ lane, x, y, lanes);
+}
+
+#[inline]
+fn xor_lane2(lane: u64, lanes: &mut [u64], x: usize, y: usize) {
+    set_lane2(get_lane2(lanes, x, y) ^ lane, x, y, lanes);
 }
 
 // Function that computes the linear feedback shift register (LFSR)
