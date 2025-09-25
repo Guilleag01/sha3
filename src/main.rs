@@ -17,18 +17,24 @@ fn main() {
 
     file.read_to_end(&mut file_data).unwrap();
 
-    let mut sha = Sha3_256::default();
-
     // println!("{:?}", (0x01 as u64).to_ne_bytes());
 
     // let text = "hola";
 
-    let now = time::Instant::now();
+    let mut time = 0_f32;
 
-    sha.absorb(&file_data);
-    let res: [u8; 32] = sha.squeeze();
+    let mut res: [u8; 32] = [0_u8; 32];
 
-    let elapsed = now.elapsed().as_micros() as f32;
+    for _ in 0..1000 {
+        let mut sha = Sha3_256::default();
+        let now = time::Instant::now();
+
+        sha.absorb(&file_data);
+        res = sha.squeeze();
+
+        let elapsed = now.elapsed().as_micros() as f32;
+        time += elapsed;
+    }
 
     // let expected_res: [u8; 32] = [
     //     0x8a, 0xf1, 0x3d, 0x92, 0x44, 0x61, 0x8e, 0xee, 0x87, 0x6d, 0x04, 0x31, 0xf3, 0x44, 0x9a,
@@ -42,7 +48,7 @@ fn main() {
     }
     println!();
 
-    println!("Time taken: {} ms", elapsed / 1000_f32);
+    println!("Avg Time taken: {} ms", (time / 1000_f32) / 1000_f32);
 
     // assert!(res == expected_res);
 }
