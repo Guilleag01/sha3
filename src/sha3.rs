@@ -1,11 +1,11 @@
 // Rate: 1088
 // Capacity: 512
 
-use std::arch::x86_64::*;
+// use std::arch::x86_64::*;
 
 use std::array;
 
-use crate::consts::LFSR_LUT;
+use crate::consts::*;
 
 const RATE_256: usize = 136;
 const TOTAL_STATE_SIZE: usize = 200;
@@ -80,7 +80,6 @@ impl Sha3_256 {
 }
 
 fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
-    // let (lanes, _) = input.as_chunks_mut::<8>();
     let (pre, lanes, post) = unsafe { input.align_to_mut::<u64>() };
     assert!(pre.len() == 0);
     assert!(post.len() == 0);
@@ -89,11 +88,11 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
     for _ in 0..ROUNDS {
         // θ step
         let c: [u64; 5] = array::from_fn(|x| {
-            get_lane2(lanes, x, 0)
-                ^ get_lane2(lanes, x, 1)
-                ^ get_lane2(lanes, x, 2)
-                ^ get_lane2(lanes, x, 3)
-                ^ get_lane2(lanes, x, 4)
+            get_lane(lanes, x, 0)
+                ^ get_lane(lanes, x, 1)
+                ^ get_lane(lanes, x, 2)
+                ^ get_lane(lanes, x, 3)
+                ^ get_lane(lanes, x, 4)
         });
 
         let mut d: u64;
@@ -122,13 +121,13 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
             //     set_lane2(out[i], x, i, lanes);
             // }
             for y in 0..5 {
-                xor_lane2(d, lanes, x, y);
+                xor_lane(d, lanes, x, y);
             }
         }
 
         // ρ and π steps
         let (mut x, mut y) = (1, 0);
-        let mut current = get_lane2(lanes, x, y);
+        let mut current = get_lane(lanes, x, y);
         let mut temp: u64;
 
         for t in 0..24 {
@@ -137,20 +136,16 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
             x = y;
             y = y2;
 
-            temp = get_lane2(lanes, x, y);
-            set_lane2(rol64(current, r), x, y, lanes);
+            temp = get_lane(lanes, x, y);
+            set_lane(rol64(current, r), x, y, lanes);
             current = temp;
         }
 
         // χ step
         for y in 0..5 {
-            // let mut temp2 = [0_u64; 5];
-            // for x in 0..5 {
-            //     temp2[x] = get_lane(lanes, x, y);
-            // }
-            let temp2: [u64; 5] = array::from_fn(|x| get_lane2(lanes, x, y));
+            let temp2: [u64; 5] = array::from_fn(|x| get_lane(lanes, x, y));
             for x in 0..5 {
-                set_lane2(
+                set_lane(
                     temp2[x] ^ ((!temp2[(x + 1) % 5]) & temp2[(x + 2) % 5]),
                     x,
                     y,
@@ -161,39 +156,28 @@ fn keccak_permute(input: &mut [u8; TOTAL_STATE_SIZE]) {
 
         // ι step
 
+        // println!("aaaa");
         for j in 0..7 {
-            let bit_pos: usize = (1 << j) - 1;
             let (lfsr_out, new_lfsr) = LFSR_LUT[lfsr_state as usize];
             lfsr_state = new_lfsr;
-            // if lfsr86540(&mut lfsr_state) {
-            //     xor_lane((1 as u64) << bit_pos, lanes, 0, 0);
-            // }
 
             if lfsr_out {
-                xor_lane2((1 as u64) << bit_pos, lanes, 0, 0);
+                xor_lane((1 as u64) << ((1 << j) - 1), lanes, 0, 0);
             }
         }
+        // lanes[0] ^= XOR_TABLE[round];
+        // println!("bbbb");
     }
 }
 
 #[inline]
-fn get_lane(lanes: &[[u8; 8]], x: usize, y: usize) -> u64 {
-    u64::from_ne_bytes(lanes[x + 5 * y])
+fn get_lane(lanes: &[u64], x: usize, y: usize) -> u64 {
+    lanes[x * 5 + y]
 }
 
 #[inline]
-fn set_lane(lane: u64, x: usize, y: usize, lanes: &mut [[u8; 8]]) {
-    lanes[x + 5 * y] = lane.to_ne_bytes();
-}
-
-#[inline]
-fn get_lane2(lanes: &[u64], x: usize, y: usize) -> u64 {
-    lanes[x + 5 * y]
-}
-
-#[inline]
-fn set_lane2(lane: u64, x: usize, y: usize, lanes: &mut [u64]) {
-    lanes[x + 5 * y] = lane;
+fn set_lane(lane: u64, x: usize, y: usize, lanes: &mut [u64]) {
+    lanes[x * 5 + y] = lane;
 }
 
 #[inline]
@@ -202,13 +186,8 @@ fn rol64(v: u64, off: usize) -> u64 {
 }
 
 #[inline]
-fn xor_lane(lane: u64, lanes: &mut [[u8; 8]], x: usize, y: usize) {
+fn xor_lane(lane: u64, lanes: &mut [u64], x: usize, y: usize) {
     set_lane(get_lane(lanes, x, y) ^ lane, x, y, lanes);
-}
-
-#[inline]
-fn xor_lane2(lane: u64, lanes: &mut [u64], x: usize, y: usize) {
-    set_lane2(get_lane2(lanes, x, y) ^ lane, x, y, lanes);
 }
 
 // Function that computes the linear feedback shift register (LFSR)

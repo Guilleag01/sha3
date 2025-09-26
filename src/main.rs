@@ -25,7 +25,9 @@ fn main() {
 
     let mut res: [u8; 32] = [0_u8; 32];
 
-    for _ in 0..1000 {
+    let times = 1;
+
+    for _ in 0..times {
         let mut sha = Sha3_256::default();
         let now = time::Instant::now();
 
@@ -48,7 +50,7 @@ fn main() {
     }
     println!();
 
-    println!("Avg Time taken: {} ms", (time / 1000_f32) / 1000_f32);
+    println!("Avg Time taken: {} ms", (time / times as f32) / 1000_f32);
 
     // assert!(res == expected_res);
 }
